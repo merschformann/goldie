@@ -14,12 +14,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13"
 ]
-dependencies = [
-    "pydantic>=2.5.2",
-    "urllib3>=2.1.0",
-    "requests>=2.31.0",
-    "pyyaml>=6.0.1",
-]
+dependencies = []
 description = "A humble library greasing the gears of golden file tests"
 dynamic = [
     "version",

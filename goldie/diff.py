@@ -1,4 +1,10 @@
 import difflib
+from enum import Enum
+
+
+class DiffStyle(Enum):
+    FULL = "full"
+    UNIFIED = "unified"
 
 
 def _red(text):
