@@ -4,21 +4,23 @@ import os.path
 import unittest
 from dataclasses import dataclass
 
-from goldie.comparison import ComparisonConfiguration, compare
-from goldie.run import RunConfiguration, run
+from goldie.compare import ConfigComparison, compare
+from goldie.run import ConfigRun, ConfigRunValidation, run
 
 
 @dataclass
-class DirectoryConfiguration:
+class ConfigDirectoryTest:
     """Configuration for directory based golden file testing."""
 
     directory: str
     """The directory to search for test files."""
     file_filter: str
     """The file filter to use to find test files."""
-    run_configuration: RunConfiguration
+    run_configuration: ConfigRun
     """The run configuration to use to run the command."""
-    comparison_configuration: ComparisonConfiguration
+    run_validation_configuration: ConfigRunValidation
+    """The run validation configuration to use to validate the command."""
+    comparison_configuration: ConfigComparison
     """The configuration for comparing the actual and golden files."""
 
 
@@ -63,7 +65,7 @@ def _get_caller_directory() -> str:
 
 def run_unittest(
     test: unittest.TestCase,
-    configuration: DirectoryConfiguration,
+    configuration: ConfigDirectoryTest,
 ):
     """
     Run the golden file test.
@@ -72,7 +74,7 @@ def run_unittest(
     ----------
     test : unittest.TestCase
         The test case to run.
-    configuration : Configuration
+    configuration : ConfigDirectoryTest
         The configuration for the golden file test.
     """
 
@@ -86,10 +88,22 @@ def run_unittest(
             golden_file = _get_golden_filename(test_file)
 
             # Run the command
-            exit_code, actual = run(test_file, configuration.run_configuration)
+            exit_code, actual_file = run(test_file, configuration.run_configuration)
+
             # Assert the exit code
-            test.assertEqual(exit_code, 0, f"Expected exit code 0, but got {exit_code}.")
+            if configuration.run_validation_configuration.validate_exit_code:
+                test.assertEqual(
+                    exit_code,
+                    configuration.run_validation_configuration.expected_exit_code,
+                    f"Expected exit code {configuration.run_validation_configuration.expected_exit_code}, but got {exit_code}.",
+                )
+
             # Compare the actual and golden files
-            equal, message = compare(actual, golden_file, configuration.comparison_configuration)
+            equal, message, differences = compare(actual_file, golden_file, configuration.comparison_configuration)
+            # Prepare the message
+            if differences:
+                message += "\n" + "\n".join(
+                    [f"{d.location}: {d.message} ({d.expected} != {d.actual})" for d in differences]
+                )
             # Assert the comparison
             test.assertTrue(equal, message)

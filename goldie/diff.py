@@ -1,5 +1,22 @@
 import difflib
+from dataclasses import dataclass
 from enum import Enum
+
+
+@dataclass
+class Difference:
+    """
+    Represents a difference between expectation and actual.
+    """
+
+    expected: any
+    """The expected value."""
+    actual: any
+    """The actual value."""
+    location: str = None
+    """The location of the difference, if applicable."""
+    message: str = None
+    """The message of the difference, if applicable."""
 
 
 class DiffStyle(Enum):

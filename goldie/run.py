@@ -23,7 +23,9 @@ class OutputMode(Enum):
 
 
 @dataclass
-class RunConfiguration:
+class ConfigRun:
+    """Configuration for running a command."""
+
     cmd: str
     """The command to run."""
     args: list[str]
@@ -38,9 +40,19 @@ class RunConfiguration:
     """The output mode."""
 
 
+@dataclass
+class ConfigRunValidation:
+    """Configuration for validating the command"""
+
+    validate_exit_code: bool = True
+    """Whether to validate the exit code of the command."""
+    expected_exit_code: int = 0
+    """The desired exit code of the command."""
+
+
 def run(
     input_file: str,
-    configuration: RunConfiguration,
+    configuration: ConfigRun,
 ) -> tuple[int, str]:
     """
     Run the command with the input file and return the result.
@@ -49,7 +61,7 @@ def run(
     ----------
     input_file : str
         The file to read the input from.
-    configuration : RunConfiguration
+    configuration : ConfigRun
         The configuration for running the command.
 
     Returns
