@@ -98,6 +98,12 @@ def run_unittest(
                     f"Expected exit code {configuration.run_validation_configuration.expected_exit_code}, but got {exit_code}.",
                 )
 
+            # Update the golden file if necessary
+            if os.environ.get("GOLDIE_UPDATE", "false").lower() == "true":
+                with open(golden_file, "w") as f:
+                    f.write(open(actual_file, "r").read())
+                continue
+
             # Compare the actual and golden files
             equal, message, differences = compare(actual_file, golden_file, configuration.comparison_configuration)
             # Prepare the message

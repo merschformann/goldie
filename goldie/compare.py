@@ -305,6 +305,49 @@ def compare_json(
     return not differences, differences
 
 
+def process(
+    actual_file: str,
+    configuration: ConfigComparison,
+    json_decoder: any = None,
+    json_encoder: any = None,
+):
+    """
+    Processes a file in place according to the processing configuration."
+    """
+
+    # Handle binary processing
+    if configuration.comparison_type == ComparisonType.BINARY:
+        return
+
+    # Read the file
+    with open(actual_file, "r") as f:
+        actual = f.read()
+
+    # Process the actual string
+    if configuration.string_processing_config:
+        actual = process_string(actual, configuration.string_processing_config)
+        if configuration.comparison_type == ComparisonType.STRING:
+            with open(actual_file, "w") as f:
+                f.write(actual)
+            return
+
+    # Decode the JSON
+    if json_decoder:
+        actual = json_decoder(actual)
+    else:
+        actual = json.loads(actual)
+
+    # Process the actual JSON
+    if configuration.json_processing_config:
+        actual = process_json(actual, configuration.json_processing_config)
+
+    # Write the processed JSON
+    if json_encoder:
+        actual = json_encoder(actual)
+    else:
+        actual = json.dumps(actual, indent=4)
+
+
 def compare(
     actual_file: str,
     golden_file: str,
