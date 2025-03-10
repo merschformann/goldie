@@ -32,3 +32,18 @@ class Configuration:
 def run(
     input_file: str,
     output_file: str,
+    configuration: Configuration,
+):
+    """
+    Run the command with the input file and write the output to the output file.
+
+    Parameters
+    ----------
+    input_file : str
+        The path to the input file.
+    output_file : str
+        The path to the output file.
+    configuration : Configuration
+        The configuration for running the command.
+    """
+    pass

@@ -52,7 +52,7 @@ def _get_caller_directory() -> str:
     return caller_directory
 
 
-def run(
+def run_unittest(
     test: unittest.TestCase,
     configuration: Configuration,
 ):
