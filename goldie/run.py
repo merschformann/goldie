@@ -4,6 +4,13 @@ from dataclasses import dataclass
 from enum import Enum
 
 
+class InputMode(Enum):
+    STDIN = "stdin"
+    """Feeds the input file via stdin."""
+    NONE = "none"
+    """Does not feed anything to the stdin."""
+
+
 class OutputMode(Enum):
     STDOUT = "stdout"
     """Intercepts only stdout."""
@@ -11,10 +18,12 @@ class OutputMode(Enum):
     """Intercepts only stderr."""
     BOTH = "both"
     """Intercepts both stdout and stderr."""
+    NONE = "none"
+    """Does not intercept anything, i.e., ignores the output."""
 
 
 @dataclass
-class Configuration:
+class RunConfiguration:
     cmd: str
     """The command to run."""
     args: list[str]
@@ -23,30 +32,30 @@ class Configuration:
     If the path to the input file is needed (instead of feeding via stdin), use the string "{input}".
     If the path to the output file is needed (instead of reading stdout), use the string "{output}".
     """
-    use_stdin: bool = True
-    """Whether to use stdin for input."""
-    use_stdout: bool = True
-    """Whether to use stdout for output."""
+    input_mode: InputMode = InputMode.STDIN
+    """The input mode."""
     output_mode: OutputMode = OutputMode.STDOUT
-    """Indicates how to intercept the output."""
+    """The output mode."""
 
 
 def run(
     input_file: str,
-    output_file: str,
-    configuration: Configuration,
-):
+    configuration: RunConfiguration,
+) -> tuple[int, str]:
     """
-    Run the command with the input file and write the output to the output file.
+    Run the command with the input file and return the result.
 
     Parameters
     ----------
     input_file : str
         The file to read the input from.
-    output_file : str
-        The file to write the output to.
-    configuration : Configuration
+    configuration : RunConfiguration
         The configuration for running the command.
+
+    Returns
+    -------
+    tuple[int, str]
+        The exit code and the path to the file to which the output was written.
     """
     # Create temporary files for input and output
     with tempfile.NamedTemporaryFile("w+") as input, tempfile.NamedTemporaryFile("w+") as output:
@@ -59,14 +68,13 @@ def run(
         args = [arg.format(input=input.name, output=output.name) for arg in configuration.args]
 
         # Run the command
-        with open(output_file, "w") as f:
+        with open(output.name, "w") as f:
             process = subprocess.run(
                 [configuration.cmd, *args],
-                stdin=input if configuration.use_stdin else None,
-                stdout=f if configuration.use_stdout else None,
-                stderr=f if configuration.output_mode == OutputMode.STDERR else None,
+                stdin=input if configuration.input_mode == InputMode.STDIN else None,
+                stdout=f if configuration.output_mode in [OutputMode.STDOUT, OutputMode.BOTH] else None,
+                stderr=f if configuration.output_mode in [OutputMode.STDERR, OutputMode.BOTH] else None,
             )
 
-        # Read the output from the temporary file
-        output.seek(0)
-        return output.read()
+        # Return the exit code and the path to the output file
+        return process.returncode, output.name

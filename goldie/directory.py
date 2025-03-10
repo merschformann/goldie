@@ -4,13 +4,22 @@ import os.path
 import unittest
 from dataclasses import dataclass
 
+from goldie.comparison import ComparisonConfiguration, compare
+from goldie.run import RunConfiguration, run
+
 
 @dataclass
-class Configuration:
+class DirectoryConfiguration:
     """Configuration for directory based golden file testing."""
 
     directory: str
+    """The directory to search for test files."""
     file_filter: str
+    """The file filter to use to find test files."""
+    run_configuration: RunConfiguration
+    """The run configuration to use to run the command."""
+    comparison_configuration: ComparisonConfiguration
+    """The configuration for comparing the actual and golden files."""
 
 
 def _get_golden_filename(path: str) -> str:
@@ -54,7 +63,7 @@ def _get_caller_directory() -> str:
 
 def run_unittest(
     test: unittest.TestCase,
-    configuration: Configuration,
+    configuration: DirectoryConfiguration,
 ):
     """
     Run the golden file test.
@@ -76,7 +85,11 @@ def run_unittest(
             # Get the golden file
             golden_file = _get_golden_filename(test_file)
 
-            # Read the test file
-
-            # Assert the content
-            test.assertEqual(actual, expected, f"Test case {i} failed.")
+            # Run the command
+            exit_code, actual = run(test_file, configuration.run_configuration)
+            # Assert the exit code
+            test.assertEqual(exit_code, 0, f"Expected exit code 0, but got {exit_code}.")
+            # Compare the actual and golden files
+            equal, message = compare(actual, golden_file, configuration.comparison_configuration)
+            # Assert the comparison
+            test.assertTrue(equal, message)
