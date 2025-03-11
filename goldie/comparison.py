@@ -102,7 +102,7 @@ class ConfigComparison:
     """The configuration for comparing strings."""
     json_processing_config: ConfigProcessJson = None
     """The configuration for processing JSON."""
-    json_comparison_config: ConfigCompareJson = None
+    json_comparison_config: ConfigCompareJson = field(default_factory=ConfigCompareJson)
     """The configuration for comparing JSON."""
 
 
