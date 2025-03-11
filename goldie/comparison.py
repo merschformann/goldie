@@ -3,7 +3,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 
-from jpathflat import flatten, unflatten
+from jflat import flatten, unflatten
 
 from .diff import Difference, DiffStyle, diff_color_code_full, diff_color_code_unified
 
