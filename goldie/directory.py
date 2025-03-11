@@ -12,15 +12,30 @@ from goldie.update import UPDATE
 
 
 @dataclass
+class TestDefinition:
+    """A test definition for a golden file test."""
+
+    input_file: str
+    """The input file to use for the test."""
+    extra_args: list[tuple[str, str]] = field(default_factory=list)
+    """
+    Extra arguments to pass to the command.
+    These are given as a list of tuples with the placeholder and the value.
+    """
+
+
+@dataclass
 class ConfigDirectoryTest:
     """Configuration for directory based golden file testing."""
 
-    file_filter: str
-    """The file filter to use to find test files."""
     comparison_configuration: ConfigComparison
     """The configuration for comparing the actual and golden files."""
     run_configuration: ConfigRun
     """The run configuration to use to run the command."""
+    file_filter: str = None
+    """The file filter to use to find test files."""
+    explicit_files: list[TestDefinition] = field(default_factory=list)
+    """A list of explicit files to test."""
     run_validation_configuration: ConfigRunValidation = field(default_factory=lambda: ConfigRunValidation())
     """The run validation configuration to use to validate the command."""
 
@@ -71,21 +86,34 @@ def run_unittest(
         The configuration for the golden file test.
     """
 
-    # Find all relevant files in the directory
+    # Determine the root directory
     root_directory = _get_caller_directory()
-    test_files = glob.glob(os.path.join(root_directory, configuration.file_filter))
 
-    # Remove any golden files
-    test_files = [f for f in test_files if not f.endswith(".golden")]
+    # Find files from file filter
+    filter_files = []
+    if configuration.file_filter is not None:
+        filter_files = glob.glob(os.path.join(root_directory, configuration.file_filter))
+        # Remove any golden files
+        filter_files = [f for f in filter_files if not f.endswith(".golden")]
+
+    # Convert to test definitions
+    test_files = [TestDefinition(input_file) for input_file in filter_files]
+    test_files.extend(configuration.explicit_files)
 
     # Iterate over the test cases
-    for i, (input_file) in enumerate(test_files):
-        with test.subTest(case=i + 1, file=input_file), tempfile.NamedTemporaryFile("w+") as output_file:
+    for i, td in enumerate(test_files):
+        with test.subTest(case=i + 1, file=td.input_file), tempfile.NamedTemporaryFile("w+") as output_file:
             # Get the golden file
-            golden_file = _get_golden_filename(input_file)
+            golden_file = _get_golden_filename(td.input_file)
 
             # Run the command
-            exit_code = execute(input_file, output_file.name, root_directory, configuration.run_configuration)
+            exit_code = execute(
+                input_file=td.input_file,
+                output_file=output_file.name,
+                cwd=root_directory,
+                configuration=configuration.run_configuration,
+                extra_args=td.extra_args,
+            )
 
             # Assert the exit code
             if configuration.run_validation_configuration.validate_exit_code:

@@ -12,6 +12,7 @@ from .comparison import compare as compare
 from .diff import Difference as Difference
 from .diff import DiffStyle as DiffStyle
 from .directory import ConfigDirectoryTest as ConfigDirectoryTest
+from .directory import TestDefinition as TestDefinition
 from .directory import run_unittest as run_unittest
 from .execution import ConfigRun as ConfigRun
 from .execution import ConfigRunValidation as ConfigRunValidation
