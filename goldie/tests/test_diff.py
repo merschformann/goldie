@@ -1,4 +1,5 @@
 import os
+import re
 import unittest
 
 import goldie.diff
@@ -29,5 +30,8 @@ class TestDiff(unittest.TestCase):
         with open(_file_path("comparison-2.txt")) as f:
             comparison_2 = f.read()
 
-        diff = goldie.diff.diff_color_code_unified(comparison_1, comparison_2)
-        self.assertEqual(diff, "", diff)
+        diff = goldie.diff.diff_color_code_full(comparison_1, comparison_2)
+
+        clean_diff = re.sub(r"\x1b\[[\d\;]+m", "", diff)
+        self.assertIn("moosunlight", clean_diff)
+        self.assertEqual(len(diff.split("\n")), 11)
