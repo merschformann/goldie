@@ -80,7 +80,7 @@ def run_unittest(
 
     # Iterate over the test cases
     for i, (input_file) in enumerate(test_files):
-        with test.subTest(file=input_file), tempfile.NamedTemporaryFile("w+") as output_file:
+        with test.subTest(case=i + 1, file=input_file), tempfile.NamedTemporaryFile("w+") as output_file:
             # Get the golden file
             golden_file = _get_golden_filename(input_file)
 
@@ -92,7 +92,8 @@ def run_unittest(
                 test.assertEqual(
                     exit_code,
                     configuration.run_validation_configuration.expected_exit_code,
-                    f"Expected exit code {configuration.run_validation_configuration.expected_exit_code}, but got {exit_code}.",
+                    f"Expected exit code {configuration.run_validation_configuration.expected_exit_code}"
+                    + f", but got {exit_code}.",
                 )
 
             # Process the file

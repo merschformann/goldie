@@ -30,4 +30,4 @@ class TestDiff(unittest.TestCase):
             comparison_2 = f.read()
 
         diff = goldie.diff.diff_color_code_unified(comparison_1, comparison_2)
-        self.assertEquals(diff, "", diff)
+        self.assertEqual(diff, "", diff)

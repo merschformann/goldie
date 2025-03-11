@@ -79,7 +79,7 @@ def execute(
 
     # Run the command
     with open(output_file, "w") as f:
-        input_file = None if configuration.input_mode == InputMode.NONE else open(input_file, "r")
+        input_file = None if configuration.input_mode == InputMode.NONE else open(input_file)
         process = subprocess.run(
             [configuration.cmd, *args],
             stdin=input_file if configuration.input_mode == InputMode.STDIN else None,

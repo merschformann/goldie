@@ -325,7 +325,7 @@ def process(
         return
 
     # Read the file
-    with open(actual_file, "r") as f:
+    with open(actual_file) as f:
         actual = f.read()
 
     # Process the actual string
@@ -373,9 +373,9 @@ def compare(
         return equal, "Content is equal." if equal else "Content is not equal.", []
 
     # Read the files
-    with open(actual_file, "r") as f:
+    with open(actual_file) as f:
         actual = f.read()
-    with open(golden_file, "r") as f:
+    with open(golden_file) as f:
         expected = f.read()
 
     # Process the actual string
