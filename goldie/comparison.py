@@ -93,17 +93,42 @@ class ConfigCompareString:
 class ConfigComparison:
     """Configuration for comparing actual and expected."""
 
-    comparison_type: ComparisonType
+    comparison_type: ComparisonType = ComparisonType.STRING
     """The type of comparison."""
 
     string_processing_config: ConfigProcessString = None
     """The configuration for processing strings."""
-    string_comparison_config: ConfigCompareString = None
+    string_comparison_config: ConfigCompareString = field(default_factory=ConfigCompareString)
     """The configuration for comparing strings."""
     json_processing_config: ConfigProcessJson = None
     """The configuration for processing JSON."""
     json_comparison_config: ConfigCompareJson = None
     """The configuration for comparing JSON."""
+
+
+def _parse_json(json_str: str, decoder: any = None) -> tuple[dict, bool, str]:
+    """
+    Parse a JSON string.
+
+    Parameters
+    ----------
+    json_str : str
+        The JSON string.
+    decoder : any
+        The decoder to use.
+
+    Returns
+    -------
+    tuple[dict, bool, str]
+        The parsed JSON, a boolean indicating if the parsing was successful, and an error message.
+    """
+
+    try:
+        if decoder:
+            return decoder(json_str), True, ""
+        return json.loads(json_str), True, ""
+    except json.JSONDecodeError as e:
+        return {}, False, str(e)
 
 
 def process_string(
@@ -190,7 +215,7 @@ def process_json(
 
     # Apply explicit roundings
     for rounding in configuration.roundings:
-        if not isinstance(actual_flat[rounding.path], (int, float)):
+        if not isinstance(actual_flat[rounding.path], float):
             return (
                 False,
                 f"Expected number at rounding path '{rounding.path}' "
@@ -200,7 +225,7 @@ def process_json(
 
     # Apply rounding to all numbers
     for path, value in actual_flat.items():
-        if isinstance(value, (int, float)):
+        if isinstance(value, float):
             actual_flat[path] = round(value, configuration.precision)
 
     # Unflatten and return
@@ -259,37 +284,17 @@ def compare_json(
                     message="Additional key.",
                 )
             )
-        elif isinstance(expected_flat[path], (int, float)):
-            # NUMBER
-            if not isinstance(actual_flat[path], (int, float)):
-                differences.append(
-                    Difference(
-                        expected=expected_flat[path],
-                        actual=actual_flat[path],
-                        location=path,
-                        message="Expected number.",
-                    )
+        elif type(actual_flat[path]) is not type(expected_flat[path]):
+            # TYPE
+            differences.append(
+                Difference(
+                    expected=expected_flat[path],
+                    actual=actual_flat[path],
+                    location=path,
+                    message="Difference in type. "
+                    + f"Expected {type(expected_flat[path])}, but got {type(actual_flat[path])}.",
                 )
-            elif path in configuration.roundings:
-                if actual_flat[path] != expected_flat[path]:
-                    differences.append(
-                        Difference(
-                            expected=expected_flat[path],
-                            actual=actual_flat[path],
-                            location=path,
-                            message="Difference in value after explicit rounding.",
-                        )
-                    )
-            else:
-                if actual_flat[path] != expected_flat[path]:
-                    differences.append(
-                        Difference(
-                            expected=expected_flat[path],
-                            actual=actual_flat[path],
-                            location=path,
-                            message="Difference in value.",
-                        )
-                    )
+            )
         elif actual_flat[path] != expected_flat[path]:
             # SIMPLE EQUALITY
             differences.append(
@@ -332,20 +337,20 @@ def process(
             return
 
     # Decode the JSON
-    if json_decoder:
-        actual = json_decoder(actual)
-    else:
-        actual = json.loads(actual)
+    actual_json, parse_ok, parse_error = _parse_json(actual, json_decoder)
+    if not parse_ok:
+        raise ValueError(f"Error parsing JSON: {parse_error}, content: {actual}")
 
     # Process the actual JSON
     if configuration.json_processing_config:
-        actual = process_json(actual, configuration.json_processing_config)
+        actual_json = process_json(actual_json, configuration.json_processing_config)
 
     # Write the processed JSON
-    if json_encoder:
-        actual = json_encoder(actual)
-    else:
-        actual = json.dumps(actual, indent=4)
+    with open(actual_file, "w") as f:
+        if json_encoder:
+            f.write(json_encoder(actual_json))
+        else:
+            json.dump(actual_json, f, indent=4)
 
 
 def compare(

@@ -52,6 +52,7 @@ class ConfigRunValidation:
 def execute(
     input_file: str,
     output_file: str,
+    cwd: str,
     configuration: ConfigRun,
 ) -> int:
     """
@@ -63,6 +64,8 @@ def execute(
         The file to read the input from.
     output_file : str
         The file to write the output to.
+    cwd : str
+        The directory to run the command in.
     configuration : ConfigRun
         The configuration for running the command.
 
@@ -82,6 +85,7 @@ def execute(
             stdin=input_file if configuration.input_mode == InputMode.STDIN else None,
             stdout=f if configuration.output_mode in [OutputMode.STDOUT, OutputMode.BOTH] else None,
             stderr=f if configuration.output_mode in [OutputMode.STDERR, OutputMode.BOTH] else None,
+            cwd=cwd,
         )
 
     # Close the input file if necessary

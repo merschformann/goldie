@@ -1,11 +1,12 @@
 import glob
 import inspect
+import json
 import os.path
 import tempfile
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from goldie.comparison import ConfigComparison, compare
+from goldie.comparison import ConfigComparison, compare, process
 from goldie.execution import ConfigRun, ConfigRunValidation, execute
 from goldie.update import UPDATE
 
@@ -16,12 +17,12 @@ class ConfigDirectoryTest:
 
     file_filter: str
     """The file filter to use to find test files."""
-    run_configuration: ConfigRun
-    """The run configuration to use to run the command."""
-    run_validation_configuration: ConfigRunValidation
-    """The run validation configuration to use to validate the command."""
     comparison_configuration: ConfigComparison
     """The configuration for comparing the actual and golden files."""
+    run_configuration: ConfigRun
+    """The run configuration to use to run the command."""
+    run_validation_configuration: ConfigRunValidation = field(default_factory=lambda: ConfigRunValidation())
+    """The run validation configuration to use to validate the command."""
 
 
 def _get_golden_filename(path: str) -> str:
@@ -84,7 +85,7 @@ def run_unittest(
             golden_file = _get_golden_filename(input_file)
 
             # Run the command
-            exit_code = execute(input_file, output_file.name, configuration.run_configuration)
+            exit_code = execute(input_file, output_file.name, root_directory, configuration.run_configuration)
 
             # Assert the exit code
             if configuration.run_validation_configuration.validate_exit_code:
@@ -94,10 +95,13 @@ def run_unittest(
                     f"Expected exit code {configuration.run_validation_configuration.expected_exit_code}, but got {exit_code}.",
                 )
 
+            # Process the file
+            process(output_file.name, configuration.comparison_configuration)
+
             # Update the golden file if necessary
             if UPDATE:
                 with open(golden_file, "w") as f:
-                    f.write(output_file.read())
+                    f.write(json.dumps(json.load(output_file), indent=4))
                 continue
 
             # Compare the actual and golden files
