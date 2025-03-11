@@ -1,19 +1,19 @@
 import glob
 import inspect
 import os.path
+import tempfile
 import unittest
 from dataclasses import dataclass
 
-from goldie.compare import ConfigComparison, compare
-from goldie.run import ConfigRun, ConfigRunValidation, run
+from goldie.comparison import ConfigComparison, compare
+from goldie.execution import ConfigRun, ConfigRunValidation, execute
+from goldie.update import UPDATE
 
 
 @dataclass
 class ConfigDirectoryTest:
     """Configuration for directory based golden file testing."""
 
-    directory: str
-    """The directory to search for test files."""
     file_filter: str
     """The file filter to use to find test files."""
     run_configuration: ConfigRun
@@ -38,29 +38,21 @@ def _get_golden_filename(path: str) -> str:
     str
         The golden filename.
     """
-    name, ext = os.path.splitext(path)
-    name = os.path.basename(name)
-    return f"{name}.golden{ext}"
+    return path + ".golden"
 
 
 def _get_caller_directory() -> str:
     """
-    Get the directory of the caller.
+    Get the directory of the caller's caller.
 
     Returns
     -------
     str
-        The directory of the caller.
+        The directory.
     """
-    # Get the current stack frame
-    current_frame = inspect.currentframe()
-    # Get the frame of the caller
-    caller_frame = current_frame.f_back
-    # Get the filename of the caller
-    caller_filename = caller_frame.f_code.co_filename
-    # Get the directory of the caller
-    caller_directory = os.path.dirname(caller_filename)
-    return caller_directory
+    abs_path = os.path.abspath((inspect.stack()[2])[1])
+    directory_of_1py = os.path.dirname(abs_path)
+    return directory_of_1py
 
 
 def run_unittest(
@@ -79,16 +71,20 @@ def run_unittest(
     """
 
     # Find all relevant files in the directory
-    test_files = glob.glob(os.path.join(_get_caller_directory(), configuration.directory, configuration.file_filter))
+    root_directory = _get_caller_directory()
+    test_files = glob.glob(os.path.join(root_directory, configuration.file_filter))
+
+    # Remove any golden files
+    test_files = [f for f in test_files if not f.endswith(".golden")]
 
     # Iterate over the test cases
-    for i, (test_file) in enumerate(test_files):
-        with test.subTest(file=test_file):
+    for i, (input_file) in enumerate(test_files):
+        with test.subTest(file=input_file), tempfile.NamedTemporaryFile("w+") as output_file:
             # Get the golden file
-            golden_file = _get_golden_filename(test_file)
+            golden_file = _get_golden_filename(input_file)
 
             # Run the command
-            exit_code, actual_file = run(test_file, configuration.run_configuration)
+            exit_code = execute(input_file, output_file.name, configuration.run_configuration)
 
             # Assert the exit code
             if configuration.run_validation_configuration.validate_exit_code:
@@ -99,13 +95,13 @@ def run_unittest(
                 )
 
             # Update the golden file if necessary
-            if os.environ.get("GOLDIE_UPDATE", "false").lower() == "true":
+            if UPDATE:
                 with open(golden_file, "w") as f:
-                    f.write(open(actual_file, "r").read())
+                    f.write(output_file.read())
                 continue
 
             # Compare the actual and golden files
-            equal, message, differences = compare(actual_file, golden_file, configuration.comparison_configuration)
+            equal, message, differences = compare(output_file.name, golden_file, configuration.comparison_configuration)
             # Prepare the message
             if differences:
                 message += "\n" + "\n".join(

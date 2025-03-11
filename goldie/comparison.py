@@ -53,8 +53,6 @@ class JsonRounding:
 class ConfigProcessJson:
     """Configuration for comparing dictionaries based on JSON."""
 
-    ignores: list[str] = field(default_factory=list)
-    """List of paths to ignore."""
     replacements: list[JsonReplacement] = field(default_factory=list)
     """List of paths to replace."""
     roundings: list[JsonRounding] = field(default_factory=list)
@@ -67,6 +65,8 @@ class ConfigProcessJson:
 class ConfigCompareJson:
     """Configuration for comparing dictionaries based on JSON."""
 
+    ignores: list[str] = field(default_factory=list)
+    """List of paths to ignore."""
     allow_additional_keys: bool = False
     """Whether additional keys in the actual JSON are allowed."""
     allow_missing_keys: bool = False

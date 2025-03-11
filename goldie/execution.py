@@ -1,5 +1,4 @@
 import subprocess
-import tempfile
 from dataclasses import dataclass
 from enum import Enum
 
@@ -50,10 +49,11 @@ class ConfigRunValidation:
     """The desired exit code of the command."""
 
 
-def run(
+def execute(
     input_file: str,
+    output_file: str,
     configuration: ConfigRun,
-) -> tuple[int, str]:
+) -> int:
     """
     Run the command with the input file and return the result.
 
@@ -61,32 +61,32 @@ def run(
     ----------
     input_file : str
         The file to read the input from.
+    output_file : str
+        The file to write the output to.
     configuration : ConfigRun
         The configuration for running the command.
 
     Returns
     -------
-    tuple[int, str]
-        The exit code and the path to the file to which the output was written.
+    int
+        The exit code of the command.
     """
-    # Create temporary files for input and output
-    with tempfile.NamedTemporaryFile("w+") as input, tempfile.NamedTemporaryFile("w+") as output:
-        # Write the input to the temporary file
-        with open(input_file, "r") as f:
-            input.write(f.read())
-            input.seek(0)
+    # Replace the placeholders in the arguments
+    args = [arg.format(input=input_file, output=output_file) for arg in configuration.args]
 
-        # Replace the placeholders in the arguments
-        args = [arg.format(input=input.name, output=output.name) for arg in configuration.args]
+    # Run the command
+    with open(output_file, "w") as f:
+        input_file = None if configuration.input_mode == InputMode.NONE else open(input_file, "r")
+        process = subprocess.run(
+            [configuration.cmd, *args],
+            stdin=input_file if configuration.input_mode == InputMode.STDIN else None,
+            stdout=f if configuration.output_mode in [OutputMode.STDOUT, OutputMode.BOTH] else None,
+            stderr=f if configuration.output_mode in [OutputMode.STDERR, OutputMode.BOTH] else None,
+        )
 
-        # Run the command
-        with open(output.name, "w") as f:
-            process = subprocess.run(
-                [configuration.cmd, *args],
-                stdin=input if configuration.input_mode == InputMode.STDIN else None,
-                stdout=f if configuration.output_mode in [OutputMode.STDOUT, OutputMode.BOTH] else None,
-                stderr=f if configuration.output_mode in [OutputMode.STDERR, OutputMode.BOTH] else None,
-            )
+    # Close the input file if necessary
+    if input_file is not None:
+        input_file.close()
 
-        # Return the exit code and the path to the output file
-        return process.returncode, output.name
+    # Return the exit code and the path to the output file
+    return process.returncode

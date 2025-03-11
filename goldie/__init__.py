@@ -1,5 +1,5 @@
 from .__about__ import __version__
-from .compare import (
+from .comparison import (
     ConfigCompareJson,
     ConfigCompareString,
     ConfigComparison,
@@ -9,6 +9,6 @@ from .compare import (
 )
 from .diff import Difference, DiffStyle
 from .directory import ConfigDirectoryTest, run_unittest
-from .run import ConfigRun, ConfigRunValidation, InputMode, OutputMode, run
+from .execution import ConfigRun, ConfigRunValidation, InputMode, OutputMode, execute
 
 VERSION = __version__
