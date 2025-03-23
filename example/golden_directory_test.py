@@ -23,7 +23,7 @@ class TestExample(unittest.TestCase):
                     json_processing_config=goldie.ConfigProcessJson(
                         replacements=[
                             # We want to replace an unstable value with a stable one.
-                            goldie.JsonReplacement(path="random", value=3),
+                            goldie.JsonReplacement(path="data.random", value=3),
                         ],
                     ),
                 ),

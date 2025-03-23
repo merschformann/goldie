@@ -12,7 +12,8 @@ def main():
 
     # Modify some things
     parsed["processed"] = True
-    parsed["random"] = random.randint(0, 100)
+    parsed["data"] = {}
+    parsed["data"]["random"] = random.randint(0, 100)
 
     # Dump the JSON
     print(json.dumps(parsed))

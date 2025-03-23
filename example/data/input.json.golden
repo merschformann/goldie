@@ -1,5 +1,7 @@
 {
     "message": "Hello, goldie!",
     "processed": true,
-    "random": 3
+    "data": {
+        "random": 3
+    }
 }
