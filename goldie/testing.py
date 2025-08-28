@@ -123,7 +123,7 @@ def run_file_unittest(
                 exit_code,
                 configuration.run_validation_configuration.expected_exit_code,
                 f"Expected exit code {configuration.run_validation_configuration.expected_exit_code}"
-                + f", but got {exit_code}.",
+                + f", but got {exit_code}. Output: {output_file.read()}",
             )
 
         # Process the file
