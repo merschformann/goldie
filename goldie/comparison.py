@@ -2,6 +2,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from jflat import flatten, unflatten
 
@@ -17,6 +18,8 @@ class ComparisonType(Enum):
     """Comparison based on JSON."""
     BINARY = "binary"
     """Comparison based on binary files."""
+    IGNORE = "ignore"
+    """Skips the comparison entirely."""
 
 
 @dataclass
@@ -313,15 +316,15 @@ def compare_json(
 def process(
     actual_file: str,
     configuration: ConfigComparison,
-    json_decoder: any = None,
-    json_encoder: any = None,
+    json_decoder: Any = None,
+    json_encoder: Any = None,
 ):
     """
     Processes a file in place according to the processing configuration."
     """
 
-    # Handle binary processing
-    if configuration.comparison_type == ComparisonType.BINARY:
+    # No need to process binary files or when not comparing.
+    if configuration.comparison_type in [ComparisonType.BINARY, ComparisonType.IGNORE]:
         return
 
     # Read the file

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from dataclasses import dataclass, field
 
-from goldie.comparison import ConfigComparison, compare, process
+from goldie.comparison import ComparisonType, ConfigComparison, compare, process
 from goldie.execution import ConfigRun, ConfigRunValidation, execute
 from goldie.update import UPDATE
 
@@ -126,13 +126,24 @@ def run_file_unittest(
                 + f", but got {exit_code}. Output: {output_file.read()}",
             )
 
+        # If no output comparison is desired, skip the rest
+        if configuration.comparison_configuration.comparison_type == ComparisonType.IGNORE:
+            return
+
         # Process the file
         process(output_file.name, configuration.comparison_configuration)
 
         # Update the golden file if necessary
         if UPDATE:
-            with open(golden_file, "w") as f:
-                f.write(json.dumps(json.load(output_file), indent=4))
+            if configuration.comparison_configuration.comparison_type == ComparisonType.JSON:
+                try:
+                    with open(golden_file, "w") as f:
+                        f.write(json.dumps(json.load(output_file), indent=4))
+                except json.JSONDecodeError as e:
+                    raise ValueError("Failed to decode JSON from output file") from e
+            else:
+                with open(golden_file, "w") as f:
+                    f.write(output_file.read())
             return
 
         # Compare the actual and golden files
