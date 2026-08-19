@@ -1,6 +1,7 @@
 import glob
 import inspect
 import json
+import os
 import os.path
 import tempfile
 import unittest
@@ -104,14 +105,20 @@ def run_file_unittest(
     # Determine the root directory
     root_directory = _get_caller_directory()
 
-    with tempfile.NamedTemporaryFile("w+") as output_file:
+    # Create a temporary file for the command output. It is only ever accessed by name (the
+    # command, processing and comparison all operate on the path), so the handle is closed
+    # immediately. This also keeps things working on Windows, where a still-open
+    # NamedTemporaryFile cannot be reopened by another handle.
+    output_fd, output_path = tempfile.mkstemp()
+    os.close(output_fd)
+    try:
         # Get the golden file
         golden_file = _get_golden_filename(td.input_file)
 
         # Run the command
         exit_code = execute(
             input_file=td.input_file,
-            output_file=output_file.name,
+            output_file=output_path,
             cwd=root_directory,
             configuration=configuration.run_configuration,
             extra_args=td.extra_args,
@@ -119,7 +126,7 @@ def run_file_unittest(
 
         # Assert the exit code
         if configuration.run_validation_configuration.validate_exit_code:
-            with open(output_file.name) as f:
+            with open(output_path) as f:
                 output_content = f.read()
             test.assertEqual(
                 exit_code,
@@ -133,14 +140,13 @@ def run_file_unittest(
             return
 
         # Process the file
-        process(output_file.name, configuration.comparison_configuration)
+        process(output_path, configuration.comparison_configuration)
 
         # Update the golden file if necessary
         if UPDATE:
-            # `execute` and `process` write to the output file by name, so the `output_file`
-            # handle is not positioned at the start. Read the processed output back from disk
-            # instead of from the handle (which would otherwise yield an empty string).
-            with open(output_file.name) as f:
+            # Read the processed output back from disk. `execute` and `process` write to the
+            # output file by name, so its content only exists on disk (not in any open handle).
+            with open(output_path) as f:
                 processed_output = f.read()
             if configuration.comparison_configuration.comparison_type == ComparisonType.JSON:
                 # Parse before opening the golden file for writing, so that a decode error does
@@ -157,7 +163,7 @@ def run_file_unittest(
             return
 
         # Compare the actual and golden files
-        equal, message, differences = compare(output_file.name, golden_file, configuration.comparison_configuration)
+        equal, message, differences = compare(output_path, golden_file, configuration.comparison_configuration)
         # Prepare the message
         if differences:
             message += "\n" + "\n".join(
@@ -165,6 +171,9 @@ def run_file_unittest(
             )
         # Assert the comparison
         test.assertTrue(equal, message)
+    finally:
+        # Clean up the temporary output file.
+        os.remove(output_path)
 
 
 def run_directory_unittest(
