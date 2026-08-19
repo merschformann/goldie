@@ -119,11 +119,13 @@ def run_file_unittest(
 
         # Assert the exit code
         if configuration.run_validation_configuration.validate_exit_code:
+            with open(output_file.name) as f:
+                output_content = f.read()
             test.assertEqual(
                 exit_code,
                 configuration.run_validation_configuration.expected_exit_code,
                 f"Expected exit code {configuration.run_validation_configuration.expected_exit_code}"
-                + f", but got {exit_code}. Output: {output_file.read()}",
+                + f", but got {exit_code}. Output: {output_content}",
             )
 
         # If no output comparison is desired, skip the rest
@@ -135,15 +137,23 @@ def run_file_unittest(
 
         # Update the golden file if necessary
         if UPDATE:
+            # `execute` and `process` write to the output file by name, so the `output_file`
+            # handle is not positioned at the start. Read the processed output back from disk
+            # instead of from the handle (which would otherwise yield an empty string).
+            with open(output_file.name) as f:
+                processed_output = f.read()
             if configuration.comparison_configuration.comparison_type == ComparisonType.JSON:
+                # Parse before opening the golden file for writing, so that a decode error does
+                # not leave the golden file truncated (and thus empty).
                 try:
-                    with open(golden_file, "w") as f:
-                        f.write(json.dumps(json.load(output_file), indent=4))
+                    parsed_output = json.loads(processed_output)
                 except json.JSONDecodeError as e:
                     raise ValueError("Failed to decode JSON from output file") from e
+                with open(golden_file, "w") as f:
+                    f.write(json.dumps(parsed_output, indent=4))
             else:
                 with open(golden_file, "w") as f:
-                    f.write(output_file.read())
+                    f.write(processed_output)
             return
 
         # Compare the actual and golden files
