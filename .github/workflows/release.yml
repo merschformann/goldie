@@ -1,33 +1,43 @@
 name: release
-run-name: Release ${{ inputs.VERSION }} (pre-release=${{ inputs.IS_PRE_RELEASE }}) by @${{ github.actor }} from ${{ github.ref_name }}
+run-name: Release by @${{ github.actor }} from ${{ github.ref_name }}
 
-on:
-  workflow_dispatch:
-    inputs:
-      VERSION:
-        description: "The version to release"
-        required: true
-      IS_PRE_RELEASE:
-        description: "It IS a pre-release"
-        required: true
-        default: true
-        type: boolean
+# A release is triggered reactively by changing the version in the version file:
+# - stable versions (e.g., v1.2.3) are released from the main branch,
+# - dev versions (e.g., v1.2.3.dev0, v1.2.3rc1) are released as pre-releases from any other branch.
+on: [push]
+
+permissions:
+  contents: read
 
 env:
+  PACKAGE_NAME: goldie
+  MAIN_BRANCH: main
   PYTHON_VERSION: "3.13"
 
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
-  bump: # This job is used to bump the version and create a release
+  release: # This job determines whether a release is needed and creates the tag and GitHub release
+    if: ${{ github.ref_type == 'branch' }}
     runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ inputs.VERSION }}
-      GH_TOKEN: ${{ github.token }}
-      SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+    outputs:
+      VERSION: ${{ steps.version.outputs.VERSION }}
+      RELEASE_NEEDED: ${{ steps.check.outputs.RELEASE_NEEDED }}
     permissions:
-      contents: write
+      contents: write # Required for creating tags and releases
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: ${{ github.ref_name }}
     steps:
+      - name: git clone ${{ github.ref_name }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0 # Full history and tags, required for change detection and tag checks
+
       - name: set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -36,58 +46,93 @@ jobs:
           pip install --upgrade pip
           pip install build hatch
 
-      - name: configure git with the bot credentials
+      - name: filter changed version file
+        id: filter
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          filters: |
+            version:
+              - '${{ env.PACKAGE_NAME }}/__about__.py'
+
+      - name: set the version
+        id: version
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-          ssh-agent -a $SSH_AUTH_SOCK > /dev/null
-          ssh-add - <<< "${{ secrets.BOT_SSH_KEY }}"
+          VERSION="v$(hatch version)"
+          echo "Version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-          echo "${{ secrets.BOT_SIGNING_KEY }}" > ~/.ssh/signing.key
-          chmod 600 ~/.ssh/signing.key
-
-          git config --global user.name "Merschbotmann"
-          git config --global user.email "bot.merschformann@gmail.com"
-          git config --global gpg.format ssh
-          git config --global user.signingkey ~/.ssh/signing.key
-
-          git clone git@github.com:merschformann/goldie.git
-          cd goldie
-          git switch ${{ github.ref_name }}
-
-      - name: upgrade version with hatch
-        run: hatch version ${{ env.VERSION }}
-        working-directory: ./goldie
-
-      - name: commit new version
+      - name: set IS_DEV_TAG flag
         run: |
-          git add goldie/__about__.py
-          git commit -S -m "Bump goldie version to ${{ env.VERSION }}"
-          git push
-          git tag ${{ env.VERSION }}
-          git push origin ${{ env.VERSION }}
-        working-directory: ./goldie
-
-      - name: create release
-        run: |
-          PRERELEASE_FLAG=""
-          if [ ${{ inputs.IS_PRE_RELEASE }} = true ]; then
-            PRERELEASE_FLAG="--prerelease"
+          if [[ "$VERSION" =~ (alpha|beta|rc|dev|pre)([^a-z]|$) ]] || [[ "$VERSION" =~ [-\.]?([ab][0-9]+)([^a-z]|$) ]]; then
+            echo "IS_DEV_TAG=true" >> $GITHUB_ENV
+            echo "Detected dev tag: $VERSION"
+            exit 0
           fi
 
-          gh release create ${{ env.VERSION }} \
-          --verify-tag \
-          --generate-notes \
-          --title "goldie ${{ env.VERSION }}" $PRERELEASE_FLAG
-        working-directory: ./goldie
+          echo "IS_DEV_TAG=false" >> $GITHUB_ENV
+          echo "Detected stable tag: $VERSION"
+
+      - name: determine if release is needed
+        id: check
+        run: |
+          RELEASE_NEEDED=true
+          if [ "${{ steps.filter.outputs.version }}" != "true" ]; then
+            # If the version file did not change, we don't release.
+            echo "No changes to the version file detected"
+            RELEASE_NEEDED=false
+          elif [ "$IS_DEV_TAG" = "false" ] && [ "$BRANCH" != "$MAIN_BRANCH" ]; then
+            # Stable versions are only released from the main branch.
+            echo "Stable tag detected on feature branch"
+            RELEASE_NEEDED=false
+          elif [ "$IS_DEV_TAG" = "true" ] && [ "$BRANCH" = "$MAIN_BRANCH" ]; then
+            # Dev versions are only released from feature branches.
+            echo "Dev tag detected on main branch"
+            RELEASE_NEEDED=false
+          elif git show-ref --tags --verify --quiet "refs/tags/$VERSION"; then
+            # Versions are only released once.
+            echo "Version tag $VERSION already exists"
+            RELEASE_NEEDED=false
+          fi
+
+          echo "Release needed: $RELEASE_NEEDED"
+          echo "RELEASE_NEEDED=$RELEASE_NEEDED" >> $GITHUB_ENV
+          echo "RELEASE_NEEDED=$RELEASE_NEEDED" >> $GITHUB_OUTPUT
 
       - name: ensure passing build
+        if: ${{ env.RELEASE_NEEDED == 'true' }}
         run: python -m build
-        working-directory: ./goldie
 
-  release: # This job is used to publish the release to PyPI/TestPyPI
+      - name: tag new version
+        if: ${{ env.RELEASE_NEEDED == 'true' }}
+        run: |
+          git tag $VERSION
+          git push origin $VERSION
+
+      - name: create release
+        if: ${{ env.RELEASE_NEEDED == 'true' }}
+        run: |
+          PRERELEASE_FLAG=""
+          NOTES_START_TAG_FLAG=""
+          if [ "$IS_DEV_TAG" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          else
+            # Generate the notes of a full release relative to the last full release
+            LAST_FULL_RELEASE=$(gh release list --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName')
+            if [ -n "$LAST_FULL_RELEASE" ]; then
+              NOTES_START_TAG_FLAG="--notes-start-tag $LAST_FULL_RELEASE"
+            fi
+          fi
+
+          gh release create $VERSION \
+          --verify-tag \
+          --generate-notes \
+          --title "$PACKAGE_NAME $VERSION" $PRERELEASE_FLAG $NOTES_START_TAG_FLAG
+
+  publish: # This job is used to publish the release to PyPI/TestPyPI
+    needs: release
+    if: ${{ needs.release.outputs.RELEASE_NEEDED == 'true' }}
     runs-on: ubuntu-latest
-    needs: bump
     strategy:
       matrix:
         include:
@@ -102,13 +147,14 @@ jobs:
       contents: read
       id-token: write # This is required for trusted publishing to PyPI
     steps:
-      - name: git clone ${{ github.ref_name }}
-        uses: actions/checkout@v4
+      - name: git clone ${{ needs.release.outputs.VERSION }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.ref_name }}
+          ref: ${{ needs.release.outputs.VERSION }} # Build exactly the tagged commit
+          persist-credentials: false
 
       - name: set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -122,13 +168,13 @@ jobs:
 
       - name: Publish package distributions to PyPI
         if: ${{ matrix.target-env == 'pypi' }}
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: ./dist
 
       - name: Publish package distributions to TestPyPI
         if: ${{ matrix.target-env == 'testpypi' }}
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           repository-url: https://test.pypi.org/legacy/
           packages-dir: ./dist
