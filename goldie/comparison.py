@@ -189,6 +189,49 @@ def compare_string(
     return actual == expected, diff_color_code_unified(actual, expected)
 
 
+def _normalize_path(path: str) -> str:
+    """
+    Normalizes a JSON path to the form produced by flattening, i.e., with a leading '$'.
+    Paths without the leading '$' (e.g., 'data.random' or '[0].data') are supported for convenience.
+
+    Parameters
+    ----------
+    path : str
+        The JSON path.
+
+    Returns
+    -------
+    str
+        The normalized JSON path.
+    """
+
+    if path.startswith("$"):
+        return path
+    if path.startswith("[") or path.startswith("."):
+        return "$" + path
+    return "$." + path
+
+
+def _is_path_or_subpath(path: str, prefix: str) -> bool:
+    """
+    Checks whether a flattened JSON path is equal to or nested below the given prefix path.
+
+    Parameters
+    ----------
+    path : str
+        The flattened JSON path.
+    prefix : str
+        The prefix path.
+
+    Returns
+    -------
+    bool
+        True if the path is equal to or nested below the prefix path.
+    """
+
+    return path == prefix or path.startswith(prefix + ".") or path.startswith(prefix + "[")
+
+
 def process_json(
     actual: dict,
     configuration: ConfigProcessJson,
@@ -214,17 +257,30 @@ def process_json(
 
     # Apply replacements
     for replacement in configuration.replacements:
-        actual_flat[replacement.path] = replacement.value
+        path = _normalize_path(replacement.path)
+        # The path may point to a leaf value or to a whole subtree (i.e., multiple flattened paths).
+        # The replacement takes the position of the first match to preserve the order of keys.
+        if not any(_is_path_or_subpath(p, path) for p in actual_flat):
+            raise ValueError(f"Replacement path '{replacement.path}' not found in actual JSON.")
+        replaced = {}
+        for p, value in actual_flat.items():
+            if not _is_path_or_subpath(p, path):
+                replaced[p] = value
+            elif path not in replaced:
+                replaced[path] = replacement.value
+        actual_flat = replaced
 
     # Apply explicit roundings
     for rounding in configuration.roundings:
-        if not isinstance(actual_flat[rounding.path], float):
-            return (
-                False,
-                f"Expected number at rounding path '{rounding.path}' "
-                + f"but got '{type(actual_flat[rounding.path])}' (actual: {actual_flat[rounding.path]})",
+        path = _normalize_path(rounding.path)
+        if path not in actual_flat:
+            raise ValueError(f"Rounding path '{rounding.path}' not found in actual JSON.")
+        value = actual_flat[path]
+        if not isinstance(value, float):
+            raise ValueError(
+                f"Expected number at rounding path '{rounding.path}' but got '{type(value)}' (actual: {value})"
             )
-        actual_flat[rounding.path] = round(actual_flat[rounding.path], rounding.precision)
+        actual_flat[path] = round(value, rounding.precision)
 
     # Apply rounding to all numbers
     for path, value in actual_flat.items():
@@ -360,7 +416,7 @@ def compare(
     actual_file: str,
     golden_file: str,
     configuration: ConfigComparison,
-    json_decoder: any = None,
+    json_decoder: Any = None,
 ) -> tuple[bool, str, list[Difference]]:
     """
     Compares two files according to the comparison configuration."
