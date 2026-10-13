@@ -5,7 +5,7 @@ import os
 import os.path
 import tempfile
 import unittest
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from goldie.comparison import ComparisonType, ConfigComparison, compare, process
 from goldie.execution import ConfigRun, ConfigRunValidation, execute
@@ -162,8 +162,13 @@ def run_file_unittest(
                     f.write(processed_output)
             return
 
-        # Compare the actual and golden files
-        equal, message, differences = compare(output_path, golden_file, configuration.comparison_configuration)
+        # Compare the actual and golden files (the output was already processed above, so do not process it again)
+        comparison_configuration = replace(
+            configuration.comparison_configuration,
+            string_processing_config=None,
+            json_processing_config=None,
+        )
+        equal, message, differences = compare(output_path, golden_file, comparison_configuration)
         # Prepare the message
         if differences:
             message += "\n" + "\n".join(
